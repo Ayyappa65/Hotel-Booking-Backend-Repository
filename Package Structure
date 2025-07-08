@@ -1,0 +1,12 @@
+com.ayyappa.hotelbooking
+│
+├── controller        # Handles HTTP API endpoints
+├── dto              # Data Transfer Objects (input/output payloads)
+├── enums            # Enum constants used across the application
+├── exception        # Custom exception classes and handlers
+├── model            # JPA entities representing DB tables
+├── payload          # Response messages or common API structures
+├── repository       # Spring Data JPA repositories
+├── security         # Spring Security config, JWT filters, user auth
+├── service          # Business logic and service layer
+└── HotelBookingApplication.java  # Main Spring Boot application class
