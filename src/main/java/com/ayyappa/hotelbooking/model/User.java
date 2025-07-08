@@ -1,5 +1,7 @@
 package com.ayyappa.hotelbooking.model;
 
+import java.time.LocalDateTime;
+
 import com.ayyappa.hotelbooking.enums.Role;
 
 import jakarta.persistence.Column;
@@ -9,6 +11,8 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import lombok.AllArgsConstructor;
@@ -53,6 +57,27 @@ public class User {
     @Column(nullable = false)
     private Role role;
 
+    @Column(name="is_active", nullable = false, columnDefinition = "TINYINT(1) DEFAULT 1")
+    @Builder.Default
+    private Boolean isActive = true;
+
     @Column(name="address")
     private String address;
+
+     @Column(name = "created_at", updatable = false, columnDefinition = "DATETIME")
+    private LocalDateTime createdAt;
+
+    @Column(name = "updated_at", columnDefinition = "DATETIME")
+    private LocalDateTime updatedAt;
+
+    @PrePersist
+    protected void onCreate() {
+        createdAt = LocalDateTime.now();
+        updatedAt = LocalDateTime.now();
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        updatedAt = LocalDateTime.now();
+    }
 }

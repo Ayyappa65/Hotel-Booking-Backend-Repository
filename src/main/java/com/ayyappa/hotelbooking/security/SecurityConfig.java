@@ -34,7 +34,11 @@ public class SecurityConfig {
                     "/api/auth/**",        // Public authentication endpoints
                     "/v3/api-docs/**",     // OpenAPI documentation
                     "/swagger-ui/**",      // Swagger UI static files
-                    "/swagger-ui.html"     // Swagger UI main entry point
+                    "/swagger-ui.html",     // Swagger UI main entry point
+                     "/websocket-client.html", // allow your test page
+                    "/ws/**",                 // allow WebSocket
+                    "/topic/**", "/queue/**", "/app/**" ,// allow STOMP topics
+                    "/api/v1/notifications/**"
                 ).permitAll()
                 .anyRequest().authenticated()
             )
