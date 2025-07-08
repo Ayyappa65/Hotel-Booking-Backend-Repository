@@ -6,21 +6,6 @@ This backend system is structured with layered architecture principles and suppo
 
 ---
 
-## 📁 Repository Structure
-
-src/main/java/com/ayyappa/hotelbooking/
-├── controller/ # REST API endpoints (Hotel, Auth, etc.)
-├── dto/ # Data Transfer Objects for request/response
-├── enums/ # Enum definitions (e.g., roles)
-├── exception/ # Custom exception classes and handlers
-├── model/ # JPA entities (User, Hotel, Booking, etc.)
-├── payload/ # Response wrappers like MessageResponse
-├── repository/ # Spring Data JPA repositories
-├── security/ # Spring Security, JWT configs and filters
-├── service/ # Business logic implementation
-└── HotelBookingApplication.java # Application entry point
-
-
 ### Key Files
 
 - `HotelBookingApplication.java`: Main Spring Boot application launcher.
