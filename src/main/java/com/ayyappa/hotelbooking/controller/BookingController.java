@@ -1,6 +1,7 @@
 package com.ayyappa.hotelbooking.controller;
 
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.ayyappa.hotelbooking.dto.BookingDTO;
+import com.ayyappa.hotelbooking.payload.request.CheckAvailabilityRooms;
 import com.ayyappa.hotelbooking.payload.response.MessageResponse;
 import com.ayyappa.hotelbooking.service.BookingService;
 
@@ -80,6 +82,16 @@ public class BookingController {
         log.info("API - Update booking ID: {}", dto.getId());
         bookingService.saveOrUpdateBooking(dto);
         return ResponseEntity.ok(new MessageResponse("Booking updated successfully!"));
+    }
+
+    /*
+     * check-rooms availability by room ids and time
+     */
+    @PostMapping("/check-availability")
+    public ResponseEntity<Map<Long, Boolean>> checkAvailability(@RequestBody CheckAvailabilityRooms availability) {
+        log.info("Checking availability rooms {} between {} and {}",availability.getRoomIds(), availability.getCheckIn(), availability.getCheckOut());
+        Map<Long, Boolean> result = bookingService.checkRoomAvailabilityParallel(availability.getRoomIds(), availability.getCheckIn(), availability.getCheckOut());
+        return ResponseEntity.ok(result);
     }
 
     /**

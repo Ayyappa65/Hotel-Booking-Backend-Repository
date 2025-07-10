@@ -75,13 +75,13 @@ public class RoomController {
         return ResponseEntity.ok(roomService.getRoomsByHotelId(hotelId));
     }
 
-    @PostMapping("/available")
-    public ResponseEntity<List<RoomDTO>> getAvailableRooms(@RequestBody RoomDTO.FetchAvailableByHostelIdAndDate dto) {
+    // @PostMapping("/available")
+    // public ResponseEntity<List<RoomDTO>> getAvailableRooms(@RequestBody RoomDTO.FetchAvailableByHostelIdAndDate dto) {
 
-        log.info("API - Get available rooms for hotelId={} between {} and {}", dto.getHotelId(), dto.getCheckIn(), dto.getCheckOut());
-        List<RoomDTO> rooms = roomService.getAvailableRooms( dto.getHotelId(), dto.getCheckIn(), dto.getCheckOut());
-        return ResponseEntity.ok(rooms);
-    }
+    //     log.info("API - Get available rooms for hotelId={} between {} and {}", dto.getHotelId(), dto.getCheckIn(), dto.getCheckOut());
+    //     List<RoomDTO> rooms = roomService.getAvailableRooms( dto.getHotelId(), dto.getCheckIn(), dto.getCheckOut());
+    //     return ResponseEntity.ok(rooms);
+    // }
 
     /**
      * Delete a room by ID.

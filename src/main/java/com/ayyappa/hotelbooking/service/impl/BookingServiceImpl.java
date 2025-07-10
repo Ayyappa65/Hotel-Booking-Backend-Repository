@@ -2,7 +2,9 @@ package com.ayyappa.hotelbooking.service.impl;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
@@ -144,6 +146,29 @@ public class BookingServiceImpl implements BookingService {
         })
         .orElse(true); // Booking not found → treat as changed
     }
+
+
+    /*
+     * check availability rooms by with check-in and check-out time
+     */
+    @Override
+    public Map<Long, Boolean> checkRoomAvailabilityParallel(List<Long> roomIds, LocalDateTime checkIn, LocalDateTime checkOut) {
+        // Step 1: Single DB call
+        List<Booking> conflictingBookings = bookingRepository.findConflictingBookingsForRooms(roomIds, checkIn, checkOut);
+
+        // Step 2: Identify rooms with conflicts
+        Set<Long> roomsWithConflicts = conflictingBookings.parallelStream()
+            .map(b -> b.getRoom().getId())
+            .collect(Collectors.toSet());
+
+        // Step 3: Build availability map
+        return roomIds.parallelStream()
+            .collect(Collectors.toConcurrentMap(
+                roomId -> roomId,
+                roomId -> !roomsWithConflicts.contains(roomId)
+            ));
+    }
+
 
     /**
      * Get all bookings by Room ID.

@@ -49,4 +49,21 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
 
     List<Booking> findByRoomId(Long roomId);
     List<Booking> findByUserId(Long userId);
+
+    @Query("""
+    SELECT b FROM Booking b
+    WHERE b.room.id IN :roomIds
+      AND b.status IN ('BOOKED', 'COMPLETED')
+      AND (
+           (:checkIn BETWEEN b.checkInTime AND b.checkOutTime)
+        OR (:checkOut BETWEEN b.checkInTime AND b.checkOutTime)
+        OR (b.checkInTime BETWEEN :checkIn AND :checkOut)
+      )
+    """)
+    List<Booking> findConflictingBookingsForRooms(
+        @Param("roomIds") List<Long> roomIds,
+        @Param("checkIn") LocalDateTime checkIn,
+        @Param("checkOut") LocalDateTime checkOut
+    );
+
 }
