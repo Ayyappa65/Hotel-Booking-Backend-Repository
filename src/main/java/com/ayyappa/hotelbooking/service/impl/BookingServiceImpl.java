@@ -1,7 +1,10 @@
 package com.ayyappa.hotelbooking.service.impl;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
@@ -33,84 +36,113 @@ public class BookingServiceImpl implements BookingService {
     private final RoomRepository roomRepository;
     private final UserRepository userRepository;
 
+    // Map to hold locks for each room to prevent concurrent booking conflicts
+    private final ConcurrentHashMap<Long, ReentrantLock> roomLockMap = new java.util.concurrent.ConcurrentHashMap<>();
+
     /**
      * Create or update a booking based on whether the ID is present.
      * Also checks if the room is available in the given time slot.
      */
     @Override
     public BookingDTO saveOrUpdateBooking(BookingDTO dto) {
-        boolean isUpdate = dto.getId() != null;
-        log.info("{} booking request received for roomId={}, userId={}", 
-                 isUpdate ? "Update" : "Create", dto.getRoomId(), dto.getUserId());
+        Long roomId = dto.getRoomId();
 
-        // Step 1: Check room availability only for create or time change during update
-        if (!isUpdate || isBookingTimeChanged(dto)) {
-            List<Booking> conflicts = bookingRepository.findConflictingBookings(
-                dto.getRoomId(), dto.getCheckInTime(), dto.getCheckOutTime());
+        // it works only single-instance Spring Boot apps. But...
+        // If you scale horizontally (multiple server instances), this won’t prevent race conditions across instances.
+        //Solution for Distributed Systems (Optional Now):
+        //Use database-level locking (@Lock with PESSIMISTIC_WRITE).
+        //Or use a distributed lock system like Redis Redlock, Zookeeper, or Hazelcast.
+        ReentrantLock lock = roomLockMap.computeIfAbsent(roomId, rid -> new ReentrantLock());
 
-            if (!conflicts.isEmpty()) {
-                log.warn("Room {} is already booked between {} and {}",
-                         dto.getRoomId(), dto.getCheckInTime(), dto.getCheckOutTime());
-                throw new IllegalStateException("Room is not available during the selected time.");
+        //This helps trace deadlocks or waiting threads in a high-load environment.
+        log.debug("Trying to acquire lock for roomId {}", roomId);
+        lock.lock();
+        log.debug("Lock acquired for roomId {}", roomId);
+
+        try {
+
+            boolean isUpdate = dto.getId() != null;
+            log.info("{} booking request received for roomId={}, userId={}", 
+                isUpdate ? "Update" : "Create", dto.getRoomId(), dto.getUserId());
+
+            // Check room availability only for create or time change during update
+            if (!isUpdate || isBookingTimeChanged(dto)) {
+                List<Booking> conflicts = bookingRepository.findConflictingBookingsExcludingId(
+                                                    dto.getRoomId(),
+                                                    dto.getCheckInTime(),
+                                                    dto.getCheckOutTime(),
+                                                    isUpdate ? dto.getId() : null
+                );
+                if (!conflicts.isEmpty()) {
+                    log.warn("Room {} is already booked between {} and {}. Conflicting bookings: {}",
+                        dto.getRoomId(), dto.getCheckInTime(), dto.getCheckOutTime(),
+                        conflicts.stream().map(b -> b.getId().toString()).collect(Collectors.joining(", "))
+                        );
+                    throw new ResourceNotFound("Room is not available during the selected time.");
+                }
             }
+
+            Booking booking;
+            if (isUpdate) {
+                booking = bookingRepository.findById(dto.getId())
+                    .orElseThrow(() -> new ResourceNotFound("Booking not found"));
+            } else {
+                booking = new Booking();
+                Room room = roomRepository.findById(dto.getRoomId())
+                    .orElseThrow(() -> new ResourceNotFound("Room not found"));
+                User user = userRepository.findById(dto.getUserId())
+                    .orElseThrow(() -> new ResourceNotFound("User not found"));
+                booking.setRoom(room);
+                booking.setUser(user);
+            }
+
+            booking.setCheckInTime(dto.getCheckInTime());
+            booking.setCheckOutTime(dto.getCheckOutTime());
+            booking.setStatus(dto.getStatus());
+            booking.setTotalAmount(dto.getTotalAmount());
+            booking.setDurationType(dto.getDurationType());
+            booking.setGuestCount(dto.getGuestCount());
+            booking.setSpecialRequests(dto.getSpecialRequests());
+            booking.setPaymentStatus(dto.getPaymentStatus());
+
+            Booking savedBooking = bookingRepository.save(booking);
+            log.info("Booking {} successfully with ID: {}", 
+                isUpdate ? "updated" : "created", savedBooking.getId());
+
+            return mapToDTO(savedBooking);
+        } finally {
+            lock.unlock();
         }
-
-        Booking booking;
-
-        if (isUpdate) {
-            // Fetch and update existing booking
-            booking = bookingRepository.findById(dto.getId())
-                .orElseThrow(() -> {
-                    log.error("Booking not found with ID: {}", dto.getId());
-                    return new ResourceNotFound("Booking not found");
-                });
-        } else {
-            // Create new booking
-            booking = new Booking();
-
-            Room room = roomRepository.findById(dto.getRoomId())
-                .orElseThrow(() -> {
-                    log.error("Room not found with ID: {}", dto.getRoomId());
-                    return new ResourceNotFound("Room not found");
-                });
-
-            User user = userRepository.findById(dto.getUserId())
-                .orElseThrow(() -> {
-                    log.error("User not found with ID: {}", dto.getUserId());
-                    return new ResourceNotFound("User not found");
-                });
-
-            booking.setRoom(room);
-            booking.setUser(user);
-        }
-
-        // Set booking data
-        booking.setCheckInTime(dto.getCheckInTime());
-        booking.setCheckOutTime(dto.getCheckOutTime());
-        booking.setStatus(dto.getStatus());
-        booking.setTotalAmount(dto.getTotalAmount());
-        booking.setDurationType(dto.getDurationType());
-        booking.setGuestCount(dto.getGuestCount());
-        booking.setSpecialRequests(dto.getSpecialRequests());
-        booking.setPaymentStatus(dto.getPaymentStatus());
-
-        Booking savedBooking = bookingRepository.save(booking);
-        log.info("Booking {} successfully with ID: {}", 
-                 isUpdate ? "updated" : "created", savedBooking.getId());
-
-        return mapToDTO(savedBooking);
     }
 
     /**
-     * Check if check-in or check-out time has been modified in update request.
-     */
+    * Checks whether the check-in or check-out datetime has changed.
+    * Used only during an update request.
+    *
+    * @param dto BookingDTO containing new date-time range
+    * @return true if booking time has changed
+    */
     private boolean isBookingTimeChanged(BookingDTO dto) {
-        if (dto.getId() == null) return true;
+        if (dto.getId() == null) return true; // New booking → assume time changed
 
         return bookingRepository.findById(dto.getId())
-            .map(existing -> !existing.getCheckInTime().equals(dto.getCheckInTime())
-                          || !existing.getCheckOutTime().equals(dto.getCheckOutTime()))
-            .orElse(true);
+        .map(existing -> {
+            LocalDateTime existingStart = existing.getCheckInTime();
+            LocalDateTime existingEnd = existing.getCheckOutTime();
+            LocalDateTime newStart = dto.getCheckInTime();
+            LocalDateTime newEnd = dto.getCheckOutTime();
+
+            boolean changed = !(existingStart.equals(newStart) && existingEnd.equals(newEnd));
+
+            if (changed) {
+                log.info("Booking time changed for booking ID {}: [{} → {}] to [{} → {}]",
+                        dto.getId(), existingStart, existingEnd, newStart, newEnd);
+            } else {
+                log.debug("Booking time NOT changed for booking ID {}", dto.getId());
+            }
+            return changed;
+        })
+        .orElse(true); // Booking not found → treat as changed
     }
 
     /**
@@ -174,4 +206,93 @@ public class BookingServiceImpl implements BookingService {
         dto.setLastUpdatedAt(booking.getLastUpdatedAt());
         return dto;
     }
+
+    /*
+    private final RedissonClient redissonClient; // <-- Inject this
+
+
+    @Override
+    public BookingDTO saveOrUpdateBooking(BookingDTO dto) {
+    Long roomId = dto.getRoomId();
+
+    // ✅ Generate a unique distributed lock key per room
+    String lockKey = "booking-lock-room-" + roomId;
+    RLock lock = redissonClient.getLock(lockKey);
+
+    log.debug("Attempting to acquire distributed lock for roomId: {}", roomId);
+
+    boolean acquired = false;
+    try {
+        // ✅ Try to acquire the lock within 10 seconds, and auto-release it after 30 seconds
+        acquired = lock.tryLock(10, 30, TimeUnit.SECONDS);
+
+        if (!acquired) {
+            log.warn("Failed to acquire lock for roomId {} within timeout", roomId);
+            throw new IllegalStateException("Room is currently being booked. Please try again shortly.");
+        }
+
+        log.info("Distributed lock acquired for roomId {}", roomId);
+
+        boolean isUpdate = dto.getId() != null;
+        log.info("{} booking request received for roomId={}, userId={}", 
+            isUpdate ? "Update" : "Create", dto.getRoomId(), dto.getUserId());
+
+        // ✅ Check for conflicting bookings only if it's a new booking or the time has changed
+        if (!isUpdate || isBookingTimeChanged(dto)) {
+            List<Booking> conflicts = bookingRepository.findConflictingBookings(
+                dto.getRoomId(), dto.getCheckInTime(), dto.getCheckOutTime());
+
+            if (!conflicts.isEmpty()) {
+                log.warn("Room {} is already booked between {} and {}",
+                    dto.getRoomId(), dto.getCheckInTime(), dto.getCheckOutTime());
+                throw new IllegalStateException("Room is not available during the selected time.");
+            }
+        }
+
+        Booking booking;
+
+        // ✅ If it's an update, fetch the existing booking
+        if (isUpdate) {
+            booking = bookingRepository.findById(dto.getId())
+                .orElseThrow(() -> new ResourceNotFound("Booking not found"));
+        } else {
+            // ✅ Else, create a new booking and fetch Room and User entities
+            booking = new Booking();
+            Room room = roomRepository.findById(dto.getRoomId())
+                .orElseThrow(() -> new ResourceNotFound("Room not found"));
+            User user = userRepository.findById(dto.getUserId())
+                .orElseThrow(() -> new ResourceNotFound("User not found"));
+            booking.setRoom(room);
+            booking.setUser(user);
+        }
+
+        // ✅ Set or update booking fields from DTO
+        booking.setCheckInTime(dto.getCheckInTime());
+        booking.setCheckOutTime(dto.getCheckOutTime());
+        booking.setStatus(dto.getStatus());
+        booking.setTotalAmount(dto.getTotalAmount());
+        booking.setDurationType(dto.getDurationType());
+        booking.setGuestCount(dto.getGuestCount());
+        booking.setSpecialRequests(dto.getSpecialRequests());
+        booking.setPaymentStatus(dto.getPaymentStatus());
+
+        // ✅ Save the booking
+        Booking savedBooking = bookingRepository.save(booking);
+        log.info("Booking {} successfully with ID: {}", 
+            isUpdate ? "updated" : "created", savedBooking.getId());
+
+        return mapToDTO(savedBooking);
+
+    } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        log.error("Interrupted while trying to acquire lock for roomId: {}", roomId, e);
+        throw new IllegalStateException("Request interrupted. Please try again.");
+    } finally {
+        if (acquired && lock.isHeldByCurrentThread()) {
+            lock.unlock();
+            log.debug("Lock released for roomId {}", roomId);
+        }
+    }
+    }
+   */
 }

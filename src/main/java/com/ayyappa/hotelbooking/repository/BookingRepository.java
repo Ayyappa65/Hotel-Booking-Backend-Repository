@@ -12,20 +12,23 @@ import com.ayyappa.hotelbooking.model.Booking;
 public interface BookingRepository extends JpaRepository<Booking, Long> {
 
     @Query("""
-        SELECT b FROM Booking b
-        WHERE b.room.id = :roomId
-          AND b.status IN ('BOOKED', 'COMPLETED')
-          AND (
-              (:checkInTime BETWEEN b.checkInTime AND b.checkOutTime) OR
-              (:checkOutTime BETWEEN b.checkInTime AND b.checkOutTime) OR
-              (b.checkInTime BETWEEN :checkInTime AND :checkOutTime)
-          )
+    SELECT b FROM Booking b
+    WHERE b.room.id = :roomId
+      AND b.status IN ('BOOKED', 'COMPLETED')
+      AND (:excludeId IS NULL OR b.id != :excludeId)
+      AND (
+          (:checkInTime BETWEEN b.checkInTime AND b.checkOutTime)
+          OR (:checkOutTime BETWEEN b.checkInTime AND b.checkOutTime)
+          OR (b.checkInTime BETWEEN :checkInTime AND :checkOutTime)
+      )
     """)
-    List<Booking> findConflictingBookings(
+    List<Booking> findConflictingBookingsExcludingId(
         @Param("roomId") Long roomId,
         @Param("checkInTime") LocalDateTime checkInTime,
-        @Param("checkOutTime") LocalDateTime checkOutTime
+        @Param("checkOutTime") LocalDateTime checkOutTime,
+        @Param("excludeId") Long excludeId
     );
+
 
 
     @Query("""
