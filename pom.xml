@@ -130,6 +130,11 @@
             <artifactId>spring-boot-starter-websocket</artifactId>
         </dependency>
 
+        <!-- Enables email sending features using Spring's JavaMailSender. Includes Jakarta Mail API  -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
 
         <!-- Testing Dependencies -->
         <!-- Spring Boot testing support (JUnit, Mockito, MockMvc, etc.) -->
