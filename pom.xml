@@ -53,6 +53,14 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- This Maven dependency adds the AWS SDK for Amazon S3 to your Spring Boot project, enabling you to interact with S3 buckets for file storage and retrieval -->
+        <dependency>
+            <groupId>com.amazonaws</groupId>
+            <artifactId>aws-java-sdk-s3</artifactId>
+            <version>1.12.681</version>
+        </dependency>
+
+
 
         <!-- Provides JPA annotations if not already covered by spring-boot-starter-data-jpa -->
         <!-- This dependency provides the JPA annotations and interfaces from Jakarta (formerly Java EE). These include annotations like: 

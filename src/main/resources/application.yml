@@ -1,3 +1,11 @@
+aws:
+  access-key: ${AWS_ACCESS_KEY_ID}
+  secret-key: ${AWS_SECRET_ACCESS_KEY}
+  region: ap-south-1
+  s3:
+    bucket: bucket name
+
+
 management:
   endpoints:
     web:
